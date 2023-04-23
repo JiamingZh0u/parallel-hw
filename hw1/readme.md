@@ -1,1 +1,1 @@
-C++ implement of DBSCAN
+C++ implement of parallel DBSCAN
