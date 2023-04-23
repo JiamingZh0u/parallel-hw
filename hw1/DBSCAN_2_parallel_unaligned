@@ -1,0 +1,148 @@
+
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <random>
+#include <fstream>
+#include <immintrin.h>
+
+using namespace std;
+
+const double eps = 0.1;  // 邻域半径
+const int minPts = 4;   // 最小密度阈值
+
+struct Point {
+    double x, y;
+    bool visited;
+    int cluster;
+    Point(double _x, double _y) : x(_x), y(_y), visited(false), cluster(0) {}
+};
+
+/*
+46.925s
+// 计算两点之间的距离（使用 SIMD 优化）
+double dist(const Point& p1, const Point& p2) {
+    alignas(16) double coords[4] = {p1.y, p1.x, p2.y, p2.x}; // 将四个坐标放入一个对齐的数组中
+    __m128d vec1 = _mm_load_pd(&coords[0]); // 将第一个坐标对应的两个double数加载到向量中
+    __m128d vec2 = _mm_load_pd(&coords[2]); // 将第二个坐标对应的两个double数加载到向量中
+    __m128d diff = _mm_sub_pd(vec1, vec2);
+    __m128d square = _mm_mul_pd(diff, diff);
+    __m128d sum = _mm_hadd_pd(square, square);
+    double dist;
+    _mm_store_sd(&dist, sum);
+    return sqrt(dist);
+}
+*/
+
+//29.621
+/*
+double dist(const Point& p1, const Point& p2) {
+    __m128d xmm1 = _mm_loadu_pd(&p1.x); // 使用未对齐加载指令读取p1的x和y
+    __m128d xmm2 = _mm_loadu_pd(&p2.x); // 使用未对齐加载指令读取p2的x和y
+    __m128d xmm = _mm_sub_pd(xmm1, xmm2); // 两个向量相减得到差向量
+    xmm = _mm_mul_pd(xmm, xmm); // 差向量平方得到平方向量
+    xmm = _mm_hadd_pd(xmm, xmm); // 将平方向量中的元素相加得到和向量
+    double dist;
+    _mm_store_sd(&dist, xmm); // 将和向量的低64位存储到dist中
+    return sqrt(dist); // 返回距离，使用sqrt计算平方根
+}
+*/
+
+
+//38.967
+
+double dist(const Point& p1, const Point& p2) {
+    __m128d xmm1, xmm2, xmm;
+    double temp1[2] __attribute__((aligned(16))) = {p1.y, p1.x};
+    double temp2[2] __attribute__((aligned(16))) = {p2.y, p2.x};
+    xmm1 = _mm_load_pd(temp1);
+    xmm2 = _mm_load_pd(temp2);
+    xmm = _mm_sub_pd(xmm1, xmm2);
+    xmm = _mm_mul_pd(xmm, xmm);
+    xmm = _mm_hadd_pd(xmm, xmm);
+    double result;
+    _mm_store_sd(&result, xmm);
+    return sqrt(result);
+}
+
+
+
+
+
+// 密度可达
+bool isDensityReachable(const Point& p1, const Point& p2) {
+    return dist(p1, p2) <= eps;
+}
+
+// 获取点 p 的邻域
+vector<Point*> getNeighborhood(const vector<Point>& points, const Point& p) {
+    vector<Point*> neighborhood;
+    for (auto& q : points) {
+        if (isDensityReachable(p, q)) {
+            neighborhood.push_back(const_cast<Point*>(&q));
+        }
+    }
+    return neighborhood;
+}
+
+// 判断是否为核心点
+bool isCorePoint(const vector<Point>& points, const Point& p) {
+    return getNeighborhood(points, p).size() >= minPts;
+}
+
+// 将点 p 添加到聚类 c 中
+void addToCluster(vector<Point>& points, Point& p, int c) {
+    p.cluster = c;
+    for (auto& q : getNeighborhood(points, p)) {
+        if (!q->visited) {
+            q->visited = true;
+            if (isCorePoint(points, *q)) {
+                addToCluster(points, *q, c);
+            } else {
+                q->cluster = c;
+            }
+        }
+    }
+}
+
+// DBSCAN 算法
+void dbscan(vector<Point>& points) {
+    int c = 0;
+    for (auto& p : points) {
+        if (!p.visited) {
+            p.visited = true;
+            if (isCorePoint(points, p)) {
+                c++;
+                addToCluster(points, p, c);
+            }
+            else {
+                 p.cluster = -1;
+            }
+        }
+    }
+}
+int main() {
+    for (int i=0;i<50;i++){
+    vector<Point> points;
+    default_random_engine e;
+    uniform_real_distribution<double> u(0, 10);
+    ofstream fout("result.txt"); // 打开文件用于保存运行结果
+    // 生成随机点
+    for (int i = 0; i < 10000; i++) {
+        points.emplace_back(u(e), u(e));
+    }
+
+    dbscan(points);
+
+    // 输出每个点所属的聚类
+    for (auto& p : points) {
+        //fout << p.x << " " << p.y << " " << p.cluster << endl;
+        fout << "(" << p.x << ", " << p.y << ") -> cluster " << p.cluster << endl;
+    }
+
+    fout.close(); // 关闭文件
+    cout<<"method_2 run successfully"<<endl;
+    }
+    return 0;
+}
+
