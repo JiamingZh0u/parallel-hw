@@ -1,0 +1,100 @@
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <random>
+#include <fstream>
+
+using namespace std;
+
+const double eps = 0.01;  // 邻域半径
+const int minPts = 4;   // 最小密度阈值
+
+struct Point {
+    double x, y;
+    bool visited;
+    int cluster;
+    Point(double _x, double _y) : x(_x), y(_y), visited(false), cluster(0) {}
+};
+
+// 计算两点之间的距离
+double dist(const Point& p1, const Point& p2) {
+    return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
+}
+
+// 密度可达
+bool isDensityReachable(const Point& p1, const Point& p2) {
+    return dist(p1, p2) <= eps;
+}
+
+// 获取点 p 的邻域
+vector<Point*> getNeighborhood(const vector<Point>& points, const Point& p) {
+    vector<Point*> neighborhood;
+    for (auto& q : points) {
+        if (isDensityReachable(p, q)) {
+            neighborhood.push_back(const_cast<Point*>(&q));
+        }
+    }
+    return neighborhood;
+}
+
+// 判断是否为核心点
+bool isCorePoint(const vector<Point>& points, const Point& p) {
+    return getNeighborhood(points, p).size() >= minPts;
+}
+
+// 将点 p 添加到聚类 c 中
+void addToCluster(vector<Point>& points, Point& p, int c) {
+    p.cluster = c;
+    for (auto& q : getNeighborhood(points, p)) {
+        if (!q->visited) {
+            q->visited = true;
+            if (isCorePoint(points, *q)) {
+                addToCluster(points, *q, c);
+            } else {
+                q->cluster = c;
+            }
+        }
+    }
+}
+
+// DBSCAN 算法
+void dbscan(vector<Point>& points) {
+    int c = 0;
+    for (auto& p : points) {
+        if (!p.visited) {
+            p.visited = true;
+            if (isCorePoint(points, p)) {
+                c++;
+                addToCluster(points, p, c);
+            } else {
+                p.cluster = -1;  // 噪声点
+            }
+        }
+    }
+}
+
+int main() {
+    for (int i = 0;i<10;i++){
+    // 生成随机点
+    default_random_engine gen;
+    uniform_real_distribution<double> dist(0, 10);
+    vector<Point> points;
+    for (int i = 0; i < 50000; i++) {
+        double x = dist(gen);
+        double y = dist(gen);
+        points.emplace_back(x, y);
+    }
+
+    // 进行聚类
+    dbscan(points);
+
+    // 输出结果到文件
+    ofstream outFile("result.txt");
+    for (auto& p : points) {
+        outFile << "(" << p.x << ", " << p.y << ") -> cluster " << p.cluster << endl;
+    }
+    outFile.close();
+    std::cout<<"method_1 run successfully"<<endl;
+    }
+    return 0;
+}
